@@ -367,6 +367,47 @@
   .legend-dot.ld-study   { background: var(--accent-study); box-shadow: 0 0 8px var(--glow-study); }
   .legend-dot.ld-sport   { background: var(--accent-sport); box-shadow: 0 0 8px var(--glow-sport); }
   .legend-dot.ld-routine { background: var(--accent-routine); }
+  .legend-dot.ld-now     { background: #fdcb6e; box-shadow: 0 0 8px rgba(253,203,110,0.4); }
+
+  /* ── CURRENT BLOCK ── */
+  .block.current-block {
+    border-left-color: #fdcb6e !important;
+    background: rgba(253,203,110,0.07) !important;
+    box-shadow: 0 0 14px rgba(253,203,110,0.18);
+  }
+
+  .block.current-block .block-time {
+    color: rgba(253,203,110,0.8) !important;
+  }
+
+  .block.current-block .block-label {
+    color: #ffeaa7 !important;
+  }
+
+  .block.current-block::after {
+    content: 'NOW';
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #fdcb6e;
+    background: rgba(253,203,110,0.1);
+    border: 1px solid rgba(253,203,110,0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  @keyframes nowPulse {
+    0%, 100% { box-shadow: 0 0 14px rgba(253,203,110,0.18); }
+    50%       { box-shadow: 0 0 22px rgba(253,203,110,0.35); }
+  }
+
+  .block.current-block {
+    animation: nowPulse 2.5s ease-in-out infinite;
+  }
 
   .legend .weekly-total {
     margin-left: auto;
@@ -692,6 +733,7 @@
     <div class="legend-item"><span class="legend-dot ld-study"></span> Study</div>
     <div class="legend-item"><span class="legend-dot ld-sport"></span> Sport / Exercise</div>
     <div class="legend-item"><span class="legend-dot ld-routine"></span> Meals / Routine</div>
+    <div class="legend-item"><span class="legend-dot ld-now"></span> Current block</div>
     <span class="weekly-total">UPSC ~24h &middot; Mech ~36h &middot; Total ~60h</span>
   </div>
 
@@ -709,6 +751,59 @@
       col.classList.add('today');
     }
   });
+
+  // Highlight the currently ongoing block
+  // The schedule uses 12-hour-ish times (e.g. "1:00" = 1pm, not 1am).
+  // We walk blocks in sequence and correct each time by detecting when a
+  // raw value drops significantly behind the running total (= crossed noon).
+  function rawMinutes(str) {
+    const [h, m] = str.trim().split(':').map(Number);
+    return h * 60 + (m || 0);
+  }
+
+  function buildBlockTimeline(col) {
+    const timeline = [];
+    let prev = 0;
+    col.querySelectorAll('.block').forEach(block => {
+      const timeEl = block.querySelector('.block-time');
+      if (!timeEl) { timeline.push(null); return; }
+      const parts = timeEl.textContent.split('–');
+      if (parts.length < 2) { timeline.push(null); return; }
+
+      let s = rawMinutes(parts[0]);
+      let e = rawMinutes(parts[1]);
+
+      // If this time looks earlier than where we are (> 1 hr behind), it
+      // has crossed noon — add 12 hours.
+      if (s < prev - 60) s += 720;
+      if (e < s)         e += 720;
+      if (e < prev - 60) e += 720;
+
+      prev = e;
+      timeline.push({ block, start: s, end: e });
+    });
+    return timeline;
+  }
+
+  function highlightCurrentBlock() {
+    const now = new Date();
+    const cur = now.getHours() * 60 + now.getMinutes();
+
+    const todayCol = document.querySelector('.day-col.today');
+    if (!todayCol) return;
+
+    const timeline = buildBlockTimeline(todayCol);
+    timeline.forEach(entry => {
+      if (!entry) return;
+      entry.block.classList.remove('current-block');
+      if (cur >= entry.start && cur < entry.end) {
+        entry.block.classList.add('current-block');
+      }
+    });
+  }
+
+  highlightCurrentBlock();
+  setInterval(highlightCurrentBlock, 60000); // re-check every minute
 
   // Mobile day navigation
   const isMobile = () => window.innerWidth <= 768;
